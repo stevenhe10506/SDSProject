@@ -1,0 +1,178 @@
+---
+title: "Project2"
+author: "Steven He"
+date: "2023-11-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(ggplot2)
+library(tidyverse)
+library(stringr)
+library(knitr)
+library(kableExtra)
+options(warn=-1)
+```
+
+## Introduction
+```{r}
+#To reproduce the picture go to the link below and name it "olympics.jpg" in your directory
+#https://assets.editorial.aetnd.com/uploads/2010/01/gettyimages-466313493-2.jpg?width=1080&height=540&crop=1080%3A540%2Csmart&quality=75&auto=webp
+```
+
+In this project we will be analyzing the historical dataset for all Olympic games, from Athens 1896 to Rio 2016, which can be found [here](https://www.kaggle.com/datasets/heesoo37/120-years-of-olympic-history-athletes-and-results/).The data was originally scraped from Sport-reference.com which was moved to olympepedia.org. The data was collected by dozens of Olympic historians. I are going to be investigating trends among athletes in the Olympic Games and which ones have some correlation with success. I picked this data set because I was also interested in seeing whether any trends of olympic athletes changed over the course of 120 years.
+![](olympics.jpg)
+From <https://www.history.com/topics/sports/olympic-games>
+
+## Data Preparation
+
+```{r pressure, echo=FALSE}
+#create primary data frame by merging two data sets from the csv files downloaded from kaggle
+olympic <- left_join(read.csv("athlete_events.csv"), read.csv("noc_regions.csv")[,1:2], by = "NOC")
+#setting NA in Medal column to string "None"
+olympic$Medal[is.na(olympic$Medal)] = "None"
+#Calculate BMI
+olympic <- mutate(olympic, BMI = round(Weight/(Height/100)^2,2))
+#format the Team varibale
+olympic$Team <- str_remove_all(olympic$Team, "[-1234567890]")
+#Treat year as a categorical variable
+olympic$Year <- as.character(olympic$Year)
+#make a dataset with unique athletes for each year 
+olympicuniq <- distinct(olympic, ID, Year, .keep_all = T)
+```
+
+The data was downloaded from the kaggle database and the .csv files could be directly imported into Rstudio. Included was a csv with all the athletes and their information, and a csv. that had a key of all the NOC codes and what they meant, with a general and sometimes a specific region. In the athlete dataset the given team was the specific region, so I merged the datasets to also have a column for the general regions each team was part of. I also turned all the NA's in the medal column into "None", as NA meant that they didn't win medals.  I left the NA's in height and weight columns since NA meant they couldn't get any information on those variables. I also decided to treat Years as a categorical variable and changed it to a string, and I created a new variable called BMI. The total number of different athlete values was `r nrow(olympic)`, but the total number of individual athletes is `r length(unique(olympic$ID))`. These two values are different because the same athletes who competed in different events or in multiple different Olympics have a separate row for each event and Olympics year. I created a another data set that just has the unique athletes per year, since athletes can complete in multiple events and are counted multiple times and would make graphing measurements like BMI inaccurate.
+
+## Variable Descriptions
+```{r}
+#creating vectors to merge into a tibble with variable information
+variableNames <- names(olympic)
+variableType <- sapply(olympic, class)
+variableDescriptions <- c("Unique number for each athlete", "Athlete's name", "M or F", "In Years", "In centimeters", "In kilograms", "Team name", "National Olympic Committee 3-letter code", "Year and season", "Year Games took place", "Summer or Winter", "Host City", "Type of Sport", "Event Name", "Gold, Silver, Bronze, or None", "Region Team is from", "BMI of Athlete")
+variabletib <- tibble(variableNames, variableType, variableDescriptions)
+#creating table
+variabletib %>% 
+  kbl(col.names = c(variableNames = "Variable Names", variableType = "Variable Type", variableDescriptions= "Variable Descriptions")) %>%
+  kable_styling(full_width = F) %>%
+  kable_minimal()
+```
+
+## Univariate Analyses
+```{r}
+# making a function to graph Univariate and bivariate with if statements
+graphfun <- function(dataf, var1, var2 = NA){
+  if(is.na(var2)){
+    if(is.numeric(dataf[,var1])){
+      return(ggplot(dataf, aes_string(x = var1)) + geom_histogram() + labs(x = var1, y = "Count", title = paste("Histogram By", var1, "in Olympic Athletes")))
+    }
+    else{
+      return(ggplot(dataf, aes_string(x = var1)) + geom_bar()+ labs(x = var1, y = "Count", title = paste("Bar graph By", var1, "in Olympic Athletes"))+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size = rel(.4))))
+    }
+  }
+  else{
+    if(is.numeric(dataf[,var1]) & is.numeric(dataf[,var2])){
+      return(ggplot(dataf, aes_string(x = var1, y = var2))+ geom_point() + labs(x = var1, y = var1, title = paste("Scatterplot By", var1, "and", var2, "in Olympic Athletes")))
+    }
+   else if(is.character(dataf[,var1]) & is.character(dataf[,var2])){
+      return(ggplot(dataf, aes_string(var1))+ geom_bar(aes_string(fill =  var2), position = "dodge")+ labs(x = var1, y = "count", title = paste("Barplot By", var1, "and", var2, "in Olympic Athletes"))+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size = rel(.5))))
+    }
+    else{
+      return(ggplot(dataf, aes_string(x = var1, y = var2))+ geom_boxplot()+ labs(x = var1, y = var2, title = paste("Boxplot By", var1, "and", var2, "in Olympic Athletes")))
+    }
+  }
+}
+graphfun(olympicuniq, "Age")
+
+oawd <- filter(olympic, BMI > 29 & BMI < 65 )
+ggplot(oawd, aes(x = Age)) +geom_histogram()
+```
+
+The distribution of the age of Olympic athletics was skewed right, with a median of `r round(median(olympicuniq$Age, na.rm = T),2)` and an IQR of `r round(IQR(olympicuniq$Age, na.rm = T),2)`.
+
+```{r}
+graphfun(olympicuniq, "BMI")
+min(olympicuniq$BMI, na.rm = TRUE)
+```
+
+The distribution of the BMI of Olympic athletics was skewed right, with a median of `r round(median(olympicuniq$BMI, na.rm = T),2)` and an IQR of `r round(IQR(olympicuniq$BMI, na.rm = T),2)`.
+
+```{r}
+graphfun(olympicuniq, "Year")
+prop.table(table(olympicuniq$Year))
+```
+
+The distribution of the number of Olympic athletes increased constantly every year until 1994, when Winter Olympics started to occur in between Summer Olympics. The year will the highest proportion of olympic athletes was 1992 with .06 of all Olympic athletes ever attending that year, and the lowest was in 1896 with .0009 of all Olympic athletes.
+
+```{r}
+graphfun(olympic, "region")
+table(olympicuniq$region)%>%
+  as.data.frame() %>%
+  arrange(Freq)
+table(olympicuniq$region)
+```
+
+The distribution of Olympic Athletes per region shows that most have less than 2500 olympic athletes that have competed in events. The region with the most athletes is USA, with 12851, and the least is South Sudan with 3. 
+
+## Bivariate Analyses
+
+```{r}
+graphfun(olympic, "BMI", "Medal")
+aggregate(BMI~Medal, data=olympic, mean)
+aggregate(BMI~Medal, data=olympic, sd)
+```
+
+Based on the distribution of BMI to Medals, it shows that athletes who earned medals at events have a slightly higher BMI than athletes who did not earn one. The mean BMI for athletes who earn a Gold, Silver, or Bronze medal were 23.18, 23.16, and 23.15 respectively, while the mean BMI for athletes without a medal was 22.7. For standard deviation, the athletes with bronze medals had a higher SD with 3.002, and the athletes without a medal had the lowest with 2.89. 
+
+```{r}
+graphfun(olympic, "Age", "Medal")
+aggregate(Age~Medal, data=olympic, mean)
+aggregate(Age~Medal, data=olympic, sd)
+```
+
+Based on the distribution of Age to Medals, it shows that athletes who earned medals at events were slightly older on average than athletes who did not earn one. The mean age for athletes who earn a Gold, Silver, or Bronze medal were 25.9, 26, and 25.87 respectively, while the mean age for athletes without a medal was 25.49. For standard deviation, the athletes with no medals had a higher standard deviations  with 6.47, while the athletes with medals had similar standard deviations with 5.89, 6.01, and 5.83 for Gold, Silver and Bronze medal athletes. 
+
+```{r}
+graphfun(olympic, "BMI", "Year")
+#convert to data frames to get max and mins for mean and standard deivation BMI
+df1 <- as.data.frame(aggregate(BMI~Year, data=olympic, mean))
+df2 <- as.data.frame(aggregate(BMI~Year, data=olympic, sd))
+df1
+df2
+```
+
+In the Distribution of BMI to Year for Olympic Athletes, it shows that on average the BMI for athletes has not changed significantly over the course of 120 years. The year with the highest mean BMI and highest standard deviation was `r df1$Year[ df1$BMI ==max(df1$BMI)]`, with a mean and standard deviation of `r df1$BMI[ df1$BMI ==max(df1$BMI)]` and `r df2$BMI[ df1$BMI ==max(df2$BMI)]`. The year with the lowest mean BMI was `r df1$Year[ df1$BMI ==min(df1$BMI)]` with `r df1$BMI[df1$BMI ==min(df1$BMI)]`, and the year with the lowest standard deviation as `r df2$Year[ df2$BMI ==min(df2$BMI)]` with `r df2$BMI[df2$BMI ==min(df2$BMI)]`. 
+
+
+```{r}
+#create tibble of teams with at least one medal and their proportion of medals
+tib <- olympic %>% 
+  group_by(Team) %>%
+    summarise(prop = sum(table(Medal)[c("Gold", "Bronze", "Silver")])/n())
+tib = filter(tib, !is.na(prop))
+#graphing and printing tibble
+ggplot(tib, aes(x = Team, y = prop)) + geom_col()+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size = rel(.5))) + labs(title = "Graph of Proportion of Medalists for Olympic Teams", x = "Teams", y = "Proportion of Medalists")
+print(arrange(tib, prop), n = 1e3)
+```
+
+Shown is the distribution of proportion of medalists (Number of medals earned divided by total events entered) for Olympic Teams that have earned at least one medal in an event. In Olympic History the teams with the most success per event they entered are Minerva Amsterdam, the Soviet Union, East Germany, Australasia, Unified Team , and the USA, with a proportion of 1, .44, .38, .38, .322, and .29 of medalists per event entered. 
+
+## Reproducibility
+To make this report reproducible, I put comments to explain my code chunks and tried to give coherent names to important variables and data frames. 
+
+## Choice Elements
+The elements is used were 5 or more lines of inline code, merging data sets, formatting string variable, using an if statement, and writing and using a user written function. I used inline code to give descriptive statistics in Data preparation, univariate and bivariate analysis. When creating the primary data frame I would use I merged the data set with athlete information with the data set with the NOC codes and which regions they correlated to. I formatted the Olympic Team String variable in the data set since there were multiple instances of a team with the primary team with a dash and number at the end, and so I cut the dash and number to give a more representative picture of a team's success. I used if statements in the function I used to graph the variables. 
+
+## Conclusion
+
+I found that Olympic athletes who have earned medals at their events have on average a slightly higher BMI and age than athletes who did not earn medals that their events. This is to be expected, since athletes with more muscle relative to their size and more experience would be predicted to do better at events. There was also not a big difference in BMI over the years of the Olympics, which was surprising give how much training and diet has changed over the past 120 years. It was also surprising that the most successful Olympic team per event entered was Minerva Amsterdam who got a medal in every event they entered. 
+
+## References
+**Kaggle dataset**
+Rgriffin. (2018, June 15). 120 years of olympic history: Athletes and results. Kaggle. https://www.kaggle.com/datasets/heesoo37/120-years-of-olympic-history-athletes-and-results/ 
+
+**Olympic Data Website**
+Athletes. Olympedia. (n.d.). https://www.olympedia.org/ 
+
+**Olympics Picture**
+A&amp;E Television Networks. (n.d.). The Olympic Games: Locations, Facts, Ancient &amp; Modern. History.com. https://www.history.com/topics/sports/olympic-games 
